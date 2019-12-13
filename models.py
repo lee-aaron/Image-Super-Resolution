@@ -75,7 +75,7 @@ class BaseSuperResolutionModel(object):
             assert height * img_utils._image_scale_multiplier % 4 == 0, "Height of the image must be divisible by 4"
             assert width * img_utils._image_scale_multiplier % 4 == 0, "Width of the image must be divisible by 4"
 
-        if K.image_dim_ordering() == "th":
+        if K.image_data_format() == "th":
             if width is not None and height is not None:
                 shape = (channels, width * img_utils._image_scale_multiplier, height * img_utils._image_scale_multiplier)
             else:
@@ -144,7 +144,8 @@ class BaseSuperResolutionModel(object):
         :param mode: mode of upscaling. Can be "patch" or "fast"
         """
         import os
-        from scipy.misc import imread, imresize, imsave
+        from PIL import Image
+        from imageio import imwrite, imread, imsave
 
         # Destination path
         path = os.path.splitext(img_path)
@@ -152,7 +153,7 @@ class BaseSuperResolutionModel(object):
 
         # Read image
         scale_factor = int(self.scale_factor)
-        true_img = imread(img_path, mode='RGB')
+        true_img = imread(img_path, pilmode='RGB')
         init_dim_1, init_dim_2 = true_img.shape[0], true_img.shape[1]
         if verbose: print("Old Size : ", true_img.shape)
         if verbose: print("New Size : (%d, %d, 3)" % (init_dim_1 * scale_factor, init_dim_2 * scale_factor))
@@ -181,7 +182,7 @@ class BaseSuperResolutionModel(object):
             img_dim_1, img_dim_2 = self.__match_autoencoder_size(img_dim_1, img_dim_2, init_dim_1, init_dim_2,
                                                                  scale_factor)
 
-            images = imresize(true_img, (img_dim_1, img_dim_2))
+            images = np.array(Image.fromarray(true_img).resize((img_dim_2, img_dim_1)))
             images = np.expand_dims(images, axis=0)
             print("Image is reshaped to : (%d, %d, %d)" % (images.shape[1], images.shape[2], images.shape[3]))
 
@@ -190,11 +191,11 @@ class BaseSuperResolutionModel(object):
         if save_intermediate:
             if verbose: print("Saving intermediate image.")
             fn = path[0] + "_intermediate_" + path[1]
-            intermediate_img = imresize(true_img, (init_dim_1 * scale_factor, init_dim_2 * scale_factor))
+            intermediate_img = np.array(Image.fromarray(true_img).resize((init_dim_2 * scale_factor, init_dim_1 * scale_factor)))
             imsave(fn, intermediate_img)
 
         # Transpose and Process images
-        if K.image_dim_ordering() == "th":
+        if K.image_data_format() == "th":
             img_conv = images.transpose((0, 3, 1, 2)).astype(np.float32) / 255.
         else:
             img_conv = images.astype(np.float32) / 255.
@@ -208,7 +209,7 @@ class BaseSuperResolutionModel(object):
         if verbose: print("De-processing images.")
 
          # Deprocess patches
-        if K.image_dim_ordering() == "th":
+        if K.image_data_format() == "th":
             result = result.transpose((0, 2, 3, 1)).astype(np.float32) * 255.
         else:
             result = result.astype(np.float32) * 255.
@@ -344,7 +345,7 @@ def _evaluate(sr_model : BaseSuperResolutionModel, validation_dir, scale_pred=Fa
 
             x = np.expand_dims(img, axis=0)
 
-            if K.image_dim_ordering() == "th":
+            if K.image_data_format() == "th":
                 x = x.transpose((0, 3, 1, 2))
                 y = y.transpose((0, 3, 1, 2))
 
@@ -370,7 +371,7 @@ def _evaluate(sr_model : BaseSuperResolutionModel, validation_dir, scale_pred=Fa
 
             generated_path = predict_path + "%s_%s_generated.png" % (sr_model.model_name, os.path.splitext(impath)[0])
 
-            if K.image_dim_ordering() == "th":
+            if K.image_data_format() == "th":
                 y_pred = y_pred.transpose((1, 2, 0))
 
             y_pred = np.clip(y_pred, 0, 255).astype('uint8')
@@ -433,7 +434,7 @@ def _evaluate_denoise(sr_model : BaseSuperResolutionModel, validation_dir, scale
 
             x = np.expand_dims(img, axis=0)
 
-            if K.image_dim_ordering() == "th":
+            if K.image_data_format() == "th":
                 x = x.transpose((0, 3, 1, 2))
                 y = y.transpose((0, 3, 1, 2))
 
@@ -469,7 +470,7 @@ def _evaluate_denoise(sr_model : BaseSuperResolutionModel, validation_dir, scale
 
             generated_path = predict_path + "%s_%s_generated.png" % (sr_model.model_name, os.path.splitext(impath)[0])
 
-            if K.image_dim_ordering() == "th":
+            if K.image_data_format() == "th":
                 y_pred = y_pred.transpose((1, 2, 0))
 
             y_pred = np.clip(y_pred, 0, 255).astype('uint8')
@@ -579,7 +580,7 @@ class DenoisingAutoEncoderSR(BaseSuperResolutionModel):
         # Perform check that model input shape is divisible by 4
         init = super(DenoisingAutoEncoderSR, self).create_model(height, width, channels, load_weights, batch_size)
 
-        if K.image_dim_ordering() == "th":
+        if K.image_data_format() == "th":
             output_shape = (None, channels, width, height)
         else:
             output_shape = (None, width, height, channels)
@@ -833,7 +834,7 @@ class GANImageSuperResolutionModel(BaseSuperResolutionModel):
         """
         assert mode in ['test', 'train'], "'mode' must be either 'train' or 'test'"
 
-        channel_axis = 1 if K.image_dim_ordering() == 'th' else -1
+        channel_axis = 1 if K.image_data_format() == 'th' else -1
 
         gen_init = super(GANImageSuperResolutionModel, self).create_model(height, width, channels, load_weights, batch_size)
 
@@ -941,7 +942,7 @@ class GANImageSuperResolutionModel(BaseSuperResolutionModel):
     def fit(self, nb_pretrain_samples=5000, batch_size=128, nb_epochs=100, disc_train_flip=0.1,
             save_history=True, history_fn="GAN SRCNN History.txt"):
         samples_per_epoch = img_utils.image_count()
-        meanaxis = (0, 2, 3) if K.image_dim_ordering() == 'th' else (0, 1, 2)
+        meanaxis = (0, 2, 3) if K.image_data_format() == 'th' else (0, 1, 2)
 
         if self.model == None: self.create_model(mode='train', batch_size=batch_size)
 
