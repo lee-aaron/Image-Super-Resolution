@@ -5,8 +5,8 @@ import models
 import img_utils
 
 if __name__ == "__main__":
-    path = r"headline_carspeed.jpg"
-    val_path = "val_images/"
+    path = "input_images/t1.bmp"
+    val_path = "val_images/set5"
 
     scale = 2
 
@@ -129,8 +129,8 @@ if __name__ == "__main__":
     Evaluate DDSRCNN on Set5/14
     """
 
-    #ddsr = models.DeepDenoiseSR(scale)
-    #ddsr.evaluate(val_path)
+    # ddsr = models.DeepDenoiseSR(scale)
+    # ddsr.evaluate(val_path)
 
     """
     Evaluate ResNetSR on Set5/14
